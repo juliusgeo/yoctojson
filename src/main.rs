@@ -1,9 +1,10 @@
 use std::string::{String, ToString};
 use std::fs::File;
 use std::io;
+use std::io::BufReader;
 use std::io::prelude::*;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 enum TokenType {
     CurlyOpen,
     CurlyClose,
@@ -21,15 +22,15 @@ struct Token {
     token_type: TokenType
 }
 
-struct Tokenizer<T: Read + Seek> {
+struct Tokenizer<T: Read> {
     prev_pos: usize,
-    file: T,
+    file: BufReader<T>,
 }
 
-impl Tokenizer<File> {
-    fn new(file: File) -> Self{
+impl<T: Read + Seek> Tokenizer<T> {
+    fn new(buf: T) -> Self{
         return Self {
-            prev_pos: 0, file: file
+            prev_pos: 0, file: BufReader::new(buf)
         }
     }
 
@@ -125,75 +126,75 @@ impl Tokenizer<File> {
                 match p {
                     'f' | 't' => {
                         let val = self.read_n::<3>().unwrap();
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string() + &val,
                             token_type: TokenType::Boolean,
                         })
                     },
                     '-' | '.' | '0'|  '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
                         let val = self.read_while("-.0123456789");
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string() + &val,
                             token_type: TokenType::Number,
                         })
                     },
                     '\"' => {
                         let val = self.read_until("\"");
-                        return Some(Token{
+                        Some(Token{
                             value: val,
                             token_type: TokenType::StringValue,
                         })
                     },
                     '{' => {
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string(),
                             token_type: TokenType::CurlyOpen,
                         })
                     },
                     '}' => {
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string(),
                             token_type: TokenType::CurlyClose,
                         })
                     },
                     '[' => {
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string(),
                             token_type: TokenType::ArrayOpen,
                         })
                     },
                     ']' => {
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string(),
                             token_type: TokenType::ArrayClose,
                         })
                     },
                     ':' => {
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string(),
                             token_type: TokenType::Colon,
                         })
                     },
                     ',' => {
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string(),
                             token_type: TokenType::Comma,
                         })
                     },
                     'n' => {
                         let val = self.read_n::<3>().unwrap();
-                        return Some(Token{
+                        Some(Token{
                             value: p.to_string() + &val,
                             token_type: TokenType::Null,
                         })
                     }
                     _ => {
-                        return None
+                        None
                     }
                 }
             }
             Err(_) => {
-                return None
+                None
             }
         }
 
