@@ -1,7 +1,9 @@
+#![feature(bufreader_peek)]
+
 use std::string::{String, ToString};
 use std::fs::File;
 use std::io;
-use std::io::BufReader;
+use std::io::{BufReader, stdin};
 use std::io::prelude::*;
 
 #[derive(Debug, PartialEq)]
@@ -27,7 +29,7 @@ struct Tokenizer<T: Read> {
     file: BufReader<T>,
 }
 
-impl<T: Read + Seek> Tokenizer<T> {
+impl<T: Read> Tokenizer<T> {
     fn new(buf: T) -> Self{
         return Self {
             prev_pos: 0, file: BufReader::new(buf)
@@ -36,10 +38,7 @@ impl<T: Read + Seek> Tokenizer<T> {
 
     fn read_n<const N: usize>(&mut self) -> io::Result<String> {
         let mut buf  = [0u8; N];
-        if self.file.read_exact(&mut buf).is_ok(){
-        } else {
-            Err::<String, ()>(()).unwrap();
-        }
+        self.file.read_exact(&mut buf);
         let ret = std::str::from_utf8(&buf).unwrap();
         return Ok(ret.to_string())
 
@@ -47,24 +46,18 @@ impl<T: Read + Seek> Tokenizer<T> {
 
     fn read<'a>(&mut self) -> io::Result<char> {
         let mut buf  = [0u8; 1];
-        if self.file.read_exact(&mut buf).is_ok(){
-        } else {
-            Err::<&'a char, ()>(()).unwrap();
-        }
-        let ret = std::str::from_utf8(&buf).unwrap();
-        return Ok(ret.parse().unwrap())
+        self.file.read_exact(&mut buf);
+        let ret = buf[0] as char;
+        return Ok(ret)
 
     }
 
     fn peek(&mut self) -> io::Result<char> {
-        let ret = self.read();
-        self.seek(-1);
-        return ret
-
-    }
-
-    fn pos(&mut self) -> u64 {
-        return self.file.stream_position().unwrap()
+        if let Ok(ret) = self.file.peek(1) {
+            return Ok(ret[0] as char)
+        } else {
+            Err(io::Error::new(io::ErrorKind::Other, "peek failed"))
+        }
     }
 
     fn read_until(&mut self, chars: &str) -> String {
@@ -87,20 +80,21 @@ impl<T: Read + Seek> Tokenizer<T> {
         return ret.to_string()
     }
 
-    fn seek(&mut self, n: i64) {
-        self.file.seek_relative(n).unwrap();
-    }
-
 
     fn read_while(&mut self, chars: &str) -> String {
         let mut c = '\0';
         let mut ret = String::new();
         while c== '\0' || chars.contains(c) {
-            match self.read() {
+            match self.file.peek(1) {
                 Ok(p) => {
+                    if p.len() != 1 {
+                        break
+                    }
+                    let p = p[0] as char;
                     if !chars.contains(p) {
                         break
                     }
+                    self.file.consume(1);
                     c = p;
                     ret.push(p);
                 },
@@ -109,7 +103,6 @@ impl<T: Read + Seek> Tokenizer<T> {
                 }
             }
         }
-        self.seek(-1);
         return ret.to_string()
     }
 
@@ -119,8 +112,6 @@ impl<T: Read + Seek> Tokenizer<T> {
 
     fn get_token(&mut self) -> Option<Token> {
         self.read_while(" \n");
-        let p = self.pos();
-        self.prev_pos = p as usize;
         match self.read() {
             Ok(p) => {
                 match p {
@@ -251,5 +242,12 @@ mod tests {
 }
 
 fn main() {
-
+    let indent = 0;
+    // let stdin = stdin();
+    // let mut tokenizer = Tokenizer::new(stdin);
+    let file = File::open("test.json").unwrap();
+    let mut tokenizer = Tokenizer::new(file);
+    while let Some(tok) = tokenizer.get_token() {
+        println!("{:}", tok.value)
+    }
 }
