@@ -276,7 +276,7 @@ impl Prettier {
 mod tests {
     use super::*;
     use std::io::{BufReader, Cursor};
-    use crate::picojson::TokenType::{ArrayOpen, StringValue};
+    use crate::yoctojson::TokenType::{ArrayOpen, StringValue};
 
     #[test]
     fn test_read_until() {
