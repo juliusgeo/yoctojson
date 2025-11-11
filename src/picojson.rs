@@ -22,6 +22,11 @@ pub struct Token {
     pub value: String,
     token_type: TokenType
 }
+#[derive(Clone)]
+struct Char {
+    char: char,
+    is_escaped: bool
+}
 
 pub struct Tokenizer<T: Read> {
     prev_pos: usize,
@@ -38,16 +43,39 @@ impl<T: Read> Tokenizer<T> {
     fn read_n<const N: usize>(&mut self) -> io::Result<String> {
         let mut buf  = [0u8; N];
         self.buffer.read_exact(&mut buf);
-        let ret = std::str::from_utf8(&buf).unwrap();
-        return Ok(ret.to_string())
-
+        let ret = std::str::from_utf8(&buf);
+        match ret {
+            Ok(val) => { return Ok(val.to_string()) },    // If result is Ok, return the value
+            Err(err) => {
+                println!("Error: {}", err);
+                println!("Buffer: {:?}", buf);
+                return Ok("".to_string());
+            }
+        };
     }
 
-    fn read<'a>(&mut self) -> io::Result<char> {
+    fn read<'a>(&mut self) -> io::Result<Char> {
         let mut buf  = [0u8; 1];
         self.buffer.read_exact(&mut buf);
         let ret = buf[0] as char;
-        return Ok(ret)
+        if ret == '\\' {
+            // there's a slash, so maybe the next char is being escaped
+            self.buffer.read_exact(&mut buf);
+            let escaped_char = buf[0] as char;
+            return match escaped_char {
+                'n' => Ok(Char{char: '\n', is_escaped: true}),
+                'r' => Ok(Char{char: '\r', is_escaped: true}),
+                't' => Ok(Char{char: '\t', is_escaped: true}),
+                '0' => Ok(Char{char: '\0', is_escaped: true}),
+                '\"' => Ok(Char{char: '\"', is_escaped: true}),
+                '\'' => Ok(Char{char: '\'', is_escaped: true}),
+                '\\' => Ok(Char{char: '\\', is_escaped: true}),
+                // if it's not actually an escaped char, we still want to add a / before it
+                // so set is_escaped to true
+                _ => Ok(Char{char: escaped_char, is_escaped: true})
+            };
+        }
+        return Ok(Char{char: ret, is_escaped: false})
 
     }
 
@@ -60,16 +88,16 @@ impl<T: Read> Tokenizer<T> {
     }
 
     fn read_until(&mut self, chars: &str) -> String {
-        let mut c = '\0';
+        let mut c: Char = Char{char: '\0', is_escaped: false};
         let mut ret = String::new();
-        while c == '\0' || !chars.contains(c) {
+        while c.char == '\0' || !chars.contains(c.char) || c.is_escaped {
             match self.read() {
                 Ok(p) => {
-                    if chars.contains(p) {
-                        break
+                    c = p.clone();
+                    if p.is_escaped {
+                        ret.push('\\');
                     }
-                    c = p;
-                    ret.push(p);
+                    ret.push(p.char);
                 },
                 Err(_) => {
                     break
@@ -90,7 +118,7 @@ impl<T: Read> Tokenizer<T> {
                         break
                     }
                     let p = p[0] as char;
-                    if !chars.contains(p) {
+                    if !chars.contains(p){
                         break
                     }
                     self.buffer.consume(1);
@@ -112,10 +140,18 @@ impl<T: Read> Tokenizer<T> {
     pub fn get_token(&mut self) -> Option<Token> {
         self.read_while(" \n");
         match self.read() {
-            Ok(p) => {
+            Ok(c) => {
+                let p = c.char;
                 match p {
-                    'f' | 't' => {
+                    't' => {
                         let val = self.read_n::<3>().unwrap();
+                        Some(Token{
+                            value: p.to_string() + &val,
+                            token_type: TokenType::Boolean,
+                        })
+                    },
+                    'f' => {
+                        let val = self.read_n::<4>().unwrap();
                         Some(Token{
                             value: p.to_string() + &val,
                             token_type: TokenType::Boolean,
@@ -131,7 +167,7 @@ impl<T: Read> Tokenizer<T> {
                     '\"' | '\'' => {
                         let val = self.read_until(p.to_string().as_str());
                         Some(Token{
-                            value: val,
+                            value: p.to_string()+&val,
                             token_type: TokenType::StringValue,
                         })
                     },
@@ -205,7 +241,7 @@ impl Prettier {
                 print!("\n{:}{:}", "\t".repeat(self.indents), token.value);
             },
             TokenType::CurlyOpen => {
-                print!("{:}{:}\n", "\t".repeat(self.indents), token.value);
+                print!(" {:}\n", token.value);
                 self.indents += 1;
                 self.is_nl = true
             },
@@ -239,18 +275,21 @@ impl Prettier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufReader, Cursor};
+    use crate::picojson::TokenType::{ArrayOpen, StringValue};
 
     #[test]
     fn test_read_until() {
-        let file = File::open("test.json").unwrap();
+        let file = File::open("test_files/test.json").unwrap();
         let mut tokenizer = Tokenizer::new(file);
         let r = tokenizer.read_until("\"");
-        assert!(r == "{".to_string())
+        assert!(r == "{\"")
     }
+
 
     #[test]
     fn test_peek() {
-        let file = File::open("test.json").unwrap();
+        let file = File::open("test_files/test.json").unwrap();
         let mut tokenizer = Tokenizer::new(file);
         let _ = tokenizer.read_while("{}");
         assert!(tokenizer.peek().unwrap() == '\"')
@@ -258,14 +297,14 @@ mod tests {
 
     #[test]
     fn test_get_token() {
-        let file = File::open("test.json").unwrap();
+        let file = File::open("test_files/test.json").unwrap();
         let mut tokenizer = Tokenizer::new(file);
         let r = tokenizer.get_token().unwrap();
         assert_eq!(r.token_type, TokenType::CurlyOpen);
         assert_eq!(r.value, "{");
         let rr = tokenizer.get_token().unwrap();
         assert_eq!(rr.token_type, TokenType::StringValue);
-        assert_eq!(rr.value, "key".to_string());
+        assert_eq!(rr.value, "\"key\"".to_string());
         let colon = tokenizer.get_token().unwrap();
         assert_eq!(colon.token_type, TokenType::Colon);
         assert_eq!(colon.value, ":".to_string());
@@ -281,5 +320,19 @@ mod tests {
         let comma = tokenizer.get_token().unwrap();
         assert_eq!(comma.token_type, TokenType::Comma);
         assert_eq!(comma.value, ",".to_string())
+    }
+
+    fn reader_from_str(s: &str) -> BufReader<Cursor<&[u8]>> {
+        BufReader::new(Cursor::new(s.as_bytes()))
+    }
+
+    #[test]
+    fn test_escape() {
+        let mut reader = reader_from_str("[\"Al\0ic\\e\"]");
+        let mut tokenizer = Tokenizer::new(&mut reader);
+        assert_eq!(tokenizer.get_token().unwrap().token_type, ArrayOpen);
+        let str_token = tokenizer.get_token().unwrap();
+        assert_eq!(str_token.token_type, StringValue);
+        assert_eq!(str_token.value, "\"Al\0ic\\e\"")
     }
 }
