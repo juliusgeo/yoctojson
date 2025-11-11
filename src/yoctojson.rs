@@ -47,8 +47,6 @@ impl<T: Read> Tokenizer<T> {
         match ret {
             Ok(val) => { return Ok(val.to_string()) },    // If result is Ok, return the value
             Err(err) => {
-                println!("Error: {}", err);
-                println!("Buffer: {:?}", buf);
                 return Ok("".to_string());
             }
         };
@@ -81,22 +79,22 @@ impl<T: Read> Tokenizer<T> {
 
     fn read_until(&mut self, chars: &str) -> String {
         let mut c: Char = Char{char: '\0', is_escaped: false};
-        let mut ret = String::new();
+        let mut ret: Vec<u8> = Vec::new();
         while c.char == '\0' || !chars.contains(c.char) || c.is_escaped {
             match self.read() {
                 Ok(p) => {
                     c = p.clone();
                     if p.is_escaped {
-                        ret.push('\\');
+                        ret.push('\\' as u8);
                     }
-                    ret.push(p.char);
+                    ret.push(p.char as u8);
                 },
                 Err(_) => {
                     break
                 }
             }
         }
-        return ret.to_string()
+        return String::from_utf8(ret).unwrap()
     }
 
 
@@ -268,7 +266,7 @@ impl Prettier {
 mod tests {
     use super::*;
     use std::io::{BufReader, Cursor};
-    use crate::yoctojson::TokenType::{ArrayOpen, StringValue};
+    use crate::yoctojson::TokenType::{ArrayOpen, Colon, CurlyOpen, StringValue};
 
     #[test]
     fn test_read_until() {
@@ -311,11 +309,31 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        let mut reader = reader_from_str("[\"Al\0ic\\e\"]");
+        let mut reader = reader_from_str("[\"y\no\0c\\\t\"]");
         let mut tokenizer = Tokenizer::new(&mut reader);
         assert_eq!(tokenizer.get_token().unwrap().token_type, ArrayOpen);
         let str_token = tokenizer.get_token().unwrap();
         assert_eq!(str_token.token_type, StringValue);
-        assert_eq!(str_token.value, "\"Al\0ic\\e\"")
+        assert_eq!(str_token.value, "\"y\no\0c\\\t\"")
+    }
+
+    #[test]
+    fn test_unicode_basic() {
+        let mut reader = reader_from_str("[\"Здравствуйте\"]");
+        let mut tokenizer = Tokenizer::new(&mut reader);
+        assert_eq!(tokenizer.get_token().unwrap().token_type, ArrayOpen);
+        let str_token = tokenizer.get_token().unwrap();
+        assert_eq!(str_token.token_type, StringValue);
+        assert_eq!(str_token.value, "\"Здравствуйте\"")
+    }
+
+    #[test]
+    fn test_unicode_keys_values() {
+        let mut reader = reader_from_str("{\"Здравствуйте\": [\"Здравствуйте\"]}");
+        let mut tokenizer = Tokenizer::new(&mut reader);
+        assert_eq!(tokenizer.get_token().unwrap().token_type, CurlyOpen);
+        let str_token = tokenizer.get_token().unwrap();
+        assert_eq!(str_token.token_type, StringValue);
+        assert_eq!(str_token.value, "\"Здравствуйте\"")
     }
 }
