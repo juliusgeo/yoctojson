@@ -1,5 +1,4 @@
 #![feature(bufreader_peek)]
-#![feature(buf_read_has_data_left)]
 
 use std::io::stdin;
 use std::fs::File;

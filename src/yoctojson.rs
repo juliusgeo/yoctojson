@@ -79,14 +79,6 @@ impl<T: Read> Tokenizer<T> {
 
     }
 
-    fn peek(&mut self) -> io::Result<char> {
-        if let Ok(ret) = self.buffer.peek(1) {
-            return Ok(ret[0] as char)
-        } else {
-            Err(io::Error::new(io::ErrorKind::Other, "peek failed"))
-        }
-    }
-
     fn read_until(&mut self, chars: &str) -> String {
         let mut c: Char = Char{char: '\0', is_escaped: false};
         let mut ret = String::new();
@@ -284,15 +276,6 @@ mod tests {
         let mut tokenizer = Tokenizer::new(file);
         let r = tokenizer.read_until("\"");
         assert!(r == "{\"")
-    }
-
-
-    #[test]
-    fn test_peek() {
-        let file = File::open("test_files/test.json").unwrap();
-        let mut tokenizer = Tokenizer::new(file);
-        let _ = tokenizer.read_while("{}");
-        assert!(tokenizer.peek().unwrap() == '\"')
     }
 
     #[test]
