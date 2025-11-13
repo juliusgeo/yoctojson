@@ -60,18 +60,20 @@ impl<T: Read> Tokenizer<T> {
             // there's a slash, so maybe the next char is being escaped
             self.buffer.read_exact(&mut buf);
             let escaped_char = buf[0] as char;
-            return match escaped_char {
-                'n' => Ok(Char{char: '\n', is_escaped: true}),
-                'r' => Ok(Char{char: '\r', is_escaped: true}),
-                't' => Ok(Char{char: '\t', is_escaped: true}),
-                '0' => Ok(Char{char: '\0', is_escaped: true}),
-                '\"' => Ok(Char{char: '\"', is_escaped: true}),
-                '\'' => Ok(Char{char: '\'', is_escaped: true}),
-                '\\' => Ok(Char{char: '\\', is_escaped: true}),
+            // check for escaped chars so we don't terminate parsing of a string literal
+            // when it has escaped quotes, etc
+            return Ok(match escaped_char {
+                '\n' => Char{char: '\n', is_escaped: true},
+                '\r' => Char{char: '\r', is_escaped: true},
+                '\t' => Char{char: '\t', is_escaped: true},
+                '\0' => Char{char: '\0', is_escaped: true},
+                '\"' => Char{char: '\"', is_escaped: true},
+                '\'' => Char{char: '\'', is_escaped: true},
+                '\\' => Char{char: '\\', is_escaped: true},
                 // if it's not actually an escaped char, we still want to add a / before it
                 // so set is_escaped to true
-                _ => Ok(Char{char: escaped_char, is_escaped: true})
-            };
+                _ =>Char{char: escaped_char, is_escaped: true}
+            });
         }
         return Ok(Char{char: ret, is_escaped: false})
 
@@ -309,12 +311,12 @@ mod tests {
 
     #[test]
     fn test_escape() {
-        let mut reader = reader_from_str("[\"y\no\0c\\\t\"]");
+        let mut reader = reader_from_str("[\"y\\\no\\\0c\\e\\\t\"]");
         let mut tokenizer = Tokenizer::new(&mut reader);
         assert_eq!(tokenizer.get_token().unwrap().token_type, ArrayOpen);
         let str_token = tokenizer.get_token().unwrap();
         assert_eq!(str_token.token_type, StringValue);
-        assert_eq!(str_token.value, "\"y\no\0c\\\t\"")
+        assert_eq!(str_token.value, "\"y\\\no\\\0c\\e\\\t\"");
     }
 
     #[test]
