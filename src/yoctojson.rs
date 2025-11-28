@@ -1,6 +1,5 @@
 
 use std::string::{String, ToString};
-use std::fs::File;
 use std::io;
 use std::io::{BufReader};
 use std::io::prelude::*;
@@ -29,40 +28,54 @@ struct Char{
 }
 
 pub struct Tokenizer<T: Read> {
-    prev_pos: usize,
     buffer: BufReader<T>,
 }
 
 impl<T: Read> Tokenizer<T> {
     pub fn new(buf: T) -> Self{
         return Self {
-            prev_pos: 0, buffer: BufReader::new(buf)
+            buffer: BufReader::new(buf)
         }
     }
 
     fn read_n<const N: usize>(&mut self) -> io::Result<String> {
         let mut buf  = [0u8; N];
-        self.buffer.read_exact(&mut buf);
+        let result = self.buffer.read_exact(&mut buf);
+        match result {
+            Ok(_) => {},
+            Err(err) => {panic!("Error reading multiple bytes: {:}", err)}
+
+        }
         let ret = std::str::from_utf8(&buf);
         match ret {
             Ok(val) => { return Ok(val.to_string()) },
-            Err(err) => {
+            Err(_err) => {
                 panic!("Could not read from buffer");
             }
         };
     }
 
-    fn read<'a>(&mut self) -> io::Result<Char> {
+    fn read_char(&mut self) -> char {
         let mut buf  = [0u8; 1];
-        self.buffer.read_exact(&mut buf);
-        let ret = buf[0] as char;
-        if ret == '\\' {
+        match self.buffer.read_exact(&mut buf) {
+            Ok(_) => {
+                return buf[0] as char
+            }
+            Err(err) => {
+                panic!("couldn't read byte: {:}", err);
+            }
+        }
+
+
+    }
+    fn read<'a>(&mut self) -> io::Result<Char> {
+        let c = self.read_char();
+        if c == '\\' {
             // there's a slash, so the next char is being escaped
-            self.buffer.read_exact(&mut buf);
-            let escaped_char = buf[0] as char;
+            let escaped_char = self.read_char();
             return Ok(Char{char: escaped_char, is_escaped: true})
         }
-        return Ok(Char{char: ret, is_escaped: false})
+        return Ok(Char{char: c, is_escaped: false})
 
     }
 
@@ -110,10 +123,6 @@ impl<T: Read> Tokenizer<T> {
             }
         }
         return ret.to_string()
-    }
-
-    fn skip_whitespace(mut self) {
-        self.read_until(" \n");
     }
 
     pub fn get_token(&mut self) -> Option<Token> {
@@ -257,6 +266,7 @@ impl Prettier {
 }
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
     use super::*;
     use std::io::{BufReader, Cursor};
     use crate::yoctojson::TokenType::{ArrayOpen, CurlyOpen, StringValue, Colon, Number, Boolean, Comma};
