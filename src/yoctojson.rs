@@ -255,14 +255,14 @@ impl Prettier {
 mod tests {
     use super::*;
     use std::io::{BufReader, Cursor};
-    use crate::yoctojson::TokenType::{ArrayOpen, CurlyOpen, StringValue};
+    use crate::yoctojson::TokenType::{ArrayOpen, CurlyOpen, StringValue, Colon, Number, Boolean, Comma};
 
     #[test]
     fn test_read_until() {
         let file = File::open("test_files/test.json").unwrap();
         let mut tokenizer = Tokenizer::new(file);
         let r = tokenizer.read_until("\"");
-        assert!(r == "{\n  \"")
+        assert!(r == "[{\n  \"")
     }
 
     #[test]
@@ -270,25 +270,28 @@ mod tests {
         let file = File::open("test_files/test.json").unwrap();
         let mut tokenizer = Tokenizer::new(file);
         let r = tokenizer.get_token().unwrap();
-        assert_eq!(r.token_type, TokenType::CurlyOpen);
+        assert_eq!(r.token_type, ArrayOpen);
+        assert_eq!(r.value, "[");
+        let r = tokenizer.get_token().unwrap();
+        assert_eq!(r.token_type, CurlyOpen);
         assert_eq!(r.value, "{");
         let rr = tokenizer.get_token().unwrap();
-        assert_eq!(rr.token_type, TokenType::StringValue);
+        assert_eq!(rr.token_type, StringValue);
         assert_eq!(rr.value, "\"key\"".to_string());
         let colon = tokenizer.get_token().unwrap();
-        assert_eq!(colon.token_type, TokenType::Colon);
+        assert_eq!(colon.token_type, Colon);
         assert_eq!(colon.value, ":".to_string());
         let num = tokenizer.get_token().unwrap();
-        assert_eq!(num.token_type, TokenType::Number);
+        assert_eq!(num.token_type, Number);
         assert_eq!(num.value, "1.001".to_string());
         tokenizer.get_token().unwrap();
         tokenizer.get_token().unwrap();
         tokenizer.get_token().unwrap();
         let bool = tokenizer.get_token().unwrap();
-        assert_eq!(bool.token_type, TokenType::Boolean);
+        assert_eq!(bool.token_type, Boolean);
         assert_eq!(bool.value, "true".to_string());
         let comma = tokenizer.get_token().unwrap();
-        assert_eq!(comma.token_type, TokenType::Comma);
+        assert_eq!(comma.token_type, Comma);
         assert_eq!(comma.value, ",".to_string())
     }
 
