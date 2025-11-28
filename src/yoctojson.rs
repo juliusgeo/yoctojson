@@ -1,8 +1,7 @@
-
-use std::string::{String, ToString};
 use std::io;
-use std::io::{BufReader};
 use std::io::prelude::*;
+use std::io::BufReader;
+use std::string::{String, ToString};
 
 #[derive(Debug, PartialEq)]
 pub enum TokenType {
@@ -15,16 +14,16 @@ pub enum TokenType {
     ArrayClose,
     Comma,
     Boolean,
-    Null
+    Null,
 }
 pub struct Token {
     pub value: String,
-    token_type: TokenType
+    token_type: TokenType,
 }
 #[derive(Clone)]
-struct Char{
+struct Char {
     char: char,
-    is_escaped: bool
+    is_escaped: bool,
 }
 
 pub struct Tokenizer<T: Read> {
@@ -32,23 +31,24 @@ pub struct Tokenizer<T: Read> {
 }
 
 impl<T: Read> Tokenizer<T> {
-    pub fn new(buf: T) -> Self{
+    pub fn new(buf: T) -> Self {
         return Self {
-            buffer: BufReader::new(buf)
-        }
+            buffer: BufReader::new(buf),
+        };
     }
 
     fn read_n<const N: usize>(&mut self) -> io::Result<String> {
-        let mut buf  = [0u8; N];
+        let mut buf = [0u8; N];
         let result = self.buffer.read_exact(&mut buf);
         match result {
-            Ok(_) => {},
-            Err(err) => {panic!("Error reading multiple bytes: {:}", err)}
-
+            Ok(_) => {}
+            Err(err) => {
+                panic!("Error reading multiple bytes: {:}", err)
+            }
         }
         let ret = std::str::from_utf8(&buf);
         match ret {
-            Ok(val) => { return Ok(val.to_string()) },
+            Ok(val) => return Ok(val.to_string()),
             Err(_err) => {
                 panic!("Could not read from buffer");
             }
@@ -56,31 +56,35 @@ impl<T: Read> Tokenizer<T> {
     }
 
     fn read_char(&mut self) -> char {
-        let mut buf  = [0u8; 1];
+        let mut buf = [0u8; 1];
         match self.buffer.read_exact(&mut buf) {
-            Ok(_) => {
-                return buf[0] as char
-            }
+            Ok(_) => return buf[0] as char,
             Err(err) => {
                 panic!("couldn't read byte: {:}", err);
             }
         }
-
-
     }
     fn read<'a>(&mut self) -> io::Result<Char> {
         let c = self.read_char();
         if c == '\\' {
             // there's a slash, so the next char is being escaped
             let escaped_char = self.read_char();
-            return Ok(Char{char: escaped_char, is_escaped: true})
+            return Ok(Char {
+                char: escaped_char,
+                is_escaped: true,
+            });
         }
-        return Ok(Char{char: c, is_escaped: false})
-
+        return Ok(Char {
+            char: c,
+            is_escaped: false,
+        });
     }
 
     fn read_until(&mut self, chars: &str) -> String {
-        let mut c: Char = Char{char: '\0', is_escaped: false};
+        let mut c: Char = Char {
+            char: '\0',
+            is_escaped: false,
+        };
         let mut ret: Vec<u8> = Vec::new();
         while c.char == '\0' || !chars.contains(c.char) || c.is_escaped {
             match self.read() {
@@ -90,39 +94,34 @@ impl<T: Read> Tokenizer<T> {
                         ret.push('\\' as u8);
                     }
                     ret.push(p.char as u8);
-                },
-                Err(_) => {
-                    break
                 }
+                Err(_) => break,
             }
         }
-        return String::from_utf8(ret).unwrap()
+        return String::from_utf8(ret).unwrap();
     }
-
 
     fn read_while(&mut self, chars: &str) -> String {
         let mut c = '\0';
         let mut ret = String::new();
-        while c== '\0' || chars.contains(c) {
+        while c == '\0' || chars.contains(c) {
             match self.buffer.peek(1) {
                 Ok(p) => {
                     if p.len() != 1 {
-                        break
+                        break;
                     }
                     let p = p[0] as char;
-                    if !chars.contains(p){
-                        break
+                    if !chars.contains(p) {
+                        break;
                     }
                     self.buffer.consume(1);
                     c = p;
                     ret.push(p);
-                },
-                Err(_) => {
-                    break
                 }
+                Err(_) => break,
             }
         }
-        return ret.to_string()
+        return ret.to_string();
     }
 
     pub fn get_token(&mut self) -> Option<Token> {
@@ -133,85 +132,68 @@ impl<T: Read> Tokenizer<T> {
                 match p {
                     't' => {
                         let val = self.read_n::<3>().unwrap();
-                        Some(Token{
+                        Some(Token {
                             value: p.to_string() + &val,
                             token_type: TokenType::Boolean,
                         })
-                    },
+                    }
                     'f' => {
                         let val = self.read_n::<4>().unwrap();
-                        Some(Token{
+                        Some(Token {
                             value: p.to_string() + &val,
                             token_type: TokenType::Boolean,
                         })
-                    },
-                    '-' | '.' | '0'|  '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
+                    }
+                    '-' | '.' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
                         let val = self.read_while("-.0123456789");
-                        Some(Token{
+                        Some(Token {
                             value: p.to_string() + &val,
                             token_type: TokenType::Number,
                         })
-                    },
+                    }
                     '\"' | '\'' => {
                         let val = self.read_until(p.to_string().as_str());
-                        Some(Token{
-                            value: p.to_string()+&val,
+                        Some(Token {
+                            value: p.to_string() + &val,
                             token_type: TokenType::StringValue,
                         })
-                    },
-                    '{' => {
-                        Some(Token{
-                            value: p.to_string(),
-                            token_type: TokenType::CurlyOpen,
-                        })
-                    },
-                    '}' => {
-                        Some(Token{
-                            value: p.to_string(),
-                            token_type: TokenType::CurlyClose,
-                        })
-                    },
-                    '[' => {
-                        Some(Token{
-                            value: p.to_string(),
-                            token_type: TokenType::ArrayOpen,
-                        })
-                    },
-                    ']' => {
-                        Some(Token{
-                            value: p.to_string(),
-                            token_type: TokenType::ArrayClose,
-                        })
-                    },
-                    ':' => {
-                        Some(Token{
-                            value: p.to_string(),
-                            token_type: TokenType::Colon,
-                        })
-                    },
-                    ',' => {
-                        Some(Token{
-                            value: p.to_string(),
-                            token_type: TokenType::Comma,
-                        })
-                    },
+                    }
+                    '{' => Some(Token {
+                        value: p.to_string(),
+                        token_type: TokenType::CurlyOpen,
+                    }),
+                    '}' => Some(Token {
+                        value: p.to_string(),
+                        token_type: TokenType::CurlyClose,
+                    }),
+                    '[' => Some(Token {
+                        value: p.to_string(),
+                        token_type: TokenType::ArrayOpen,
+                    }),
+                    ']' => Some(Token {
+                        value: p.to_string(),
+                        token_type: TokenType::ArrayClose,
+                    }),
+                    ':' => Some(Token {
+                        value: p.to_string(),
+                        token_type: TokenType::Colon,
+                    }),
+                    ',' => Some(Token {
+                        value: p.to_string(),
+                        token_type: TokenType::Comma,
+                    }),
                     'n' => {
                         let val = self.read_n::<3>().unwrap();
-                        Some(Token{
+                        Some(Token {
                             value: p.to_string() + &val,
                             token_type: TokenType::Null,
                         })
                     }
-                    _ => {
-                        None
-                    }
+                    _ => None,
                 }
             }
-            Err(_) => {
-                None
-            }
+            Err(_) => None,
         }
-
     }
 }
 
@@ -227,13 +209,13 @@ impl Prettier {
             TokenType::CurlyClose => {
                 self.indents -= 1;
                 print!("\n{:}{:}", "\t".repeat(self.indents), token.value);
-            },
+            }
             TokenType::CurlyOpen => {
                 print!("{:}\n", token.value);
                 self.indents += 1;
                 self.is_nl = true;
                 self.is_in_arr = false
-            },
+            }
             TokenType::Comma => {
                 if !self.is_in_arr {
                     print!("{:}\n", token.value);
@@ -245,14 +227,14 @@ impl Prettier {
             TokenType::ArrayOpen => {
                 print!("{:}", token.value);
                 self.is_in_arr = true
-            },
+            }
             TokenType::ArrayClose => {
                 print!("{:}", token.value);
                 self.is_in_arr = false
-            },
+            }
             TokenType::Colon => {
                 print!("{:} ", token.value);
-            },
+            }
             _ => {
                 if self.is_nl {
                     print!("{:}{:}", "\t".repeat(self.indents), token.value);
@@ -266,10 +248,12 @@ impl Prettier {
 }
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
     use super::*;
+    use crate::yoctojson::TokenType::{
+        ArrayOpen, Boolean, Colon, Comma, CurlyOpen, Number, StringValue,
+    };
+    use std::fs::File;
     use std::io::{BufReader, Cursor};
-    use crate::yoctojson::TokenType::{ArrayOpen, CurlyOpen, StringValue, Colon, Number, Boolean, Comma};
 
     #[test]
     fn test_read_until() {

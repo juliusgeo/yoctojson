@@ -1,14 +1,18 @@
 #![feature(bufreader_peek)]
 
-use std::io::stdin;
-use std::fs::File;
-use std::io::Read;
 use crate::yoctojson::Tokenizer;
+use std::fs::File;
+use std::io::stdin;
+use std::io::Read;
 
 mod yoctojson;
 
 fn prettify<T: Read>(mut tokenizer: Tokenizer<T>) {
-    let mut pretty_printer = yoctojson::Prettier{indents: 0, is_nl: false, is_in_arr: false};
+    let mut pretty_printer = yoctojson::Prettier {
+        indents: 0,
+        is_nl: false,
+        is_in_arr: false,
+    };
     while let Some(tok) = tokenizer.get_token() {
         pretty_printer.print_token(tok)
     }
@@ -20,7 +24,7 @@ fn main() {
             let file = File::open(path).unwrap();
             let tokenizer = Tokenizer::new(file);
             prettify(tokenizer);
-        },
+        }
         None => {
             let stdin = stdin().lock();
             let tokenizer = Tokenizer::new(stdin);
