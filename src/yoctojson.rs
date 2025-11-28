@@ -23,7 +23,7 @@ pub struct Token {
     token_type: TokenType
 }
 #[derive(Clone)]
-struct Char {
+struct Char{
     char: char,
     is_escaped: bool
 }
@@ -45,9 +45,9 @@ impl<T: Read> Tokenizer<T> {
         self.buffer.read_exact(&mut buf);
         let ret = std::str::from_utf8(&buf);
         match ret {
-            Ok(val) => { return Ok(val.to_string()) },    // If result is Ok, return the value
+            Ok(val) => { return Ok(val.to_string()) },
             Err(err) => {
-                return Ok("".to_string());
+                panic!("Could not read from buffer");
             }
         };
     }
@@ -57,23 +57,10 @@ impl<T: Read> Tokenizer<T> {
         self.buffer.read_exact(&mut buf);
         let ret = buf[0] as char;
         if ret == '\\' {
-            // there's a slash, so maybe the next char is being escaped
+            // there's a slash, so the next char is being escaped
             self.buffer.read_exact(&mut buf);
             let escaped_char = buf[0] as char;
-            // check for escaped chars so we don't terminate parsing of a string literal
-            // when it has escaped quotes, etc
-            return Ok(match escaped_char {
-                '\n' => Char{char: '\n', is_escaped: true},
-                '\r' => Char{char: '\r', is_escaped: true},
-                '\t' => Char{char: '\t', is_escaped: true},
-                '\0' => Char{char: '\0', is_escaped: true},
-                '\"' => Char{char: '\"', is_escaped: true},
-                '\'' => Char{char: '\'', is_escaped: true},
-                '\\' => Char{char: '\\', is_escaped: true},
-                // if it's not actually an escaped char, we still want to add a / before it
-                // so set is_escaped to true
-                _ =>Char{char: escaped_char, is_escaped: true}
-            });
+            return Ok(Char{char: escaped_char, is_escaped: true})
         }
         return Ok(Char{char: ret, is_escaped: false})
 
@@ -268,14 +255,14 @@ impl Prettier {
 mod tests {
     use super::*;
     use std::io::{BufReader, Cursor};
-    use crate::yoctojson::TokenType::{ArrayOpen, Colon, CurlyOpen, StringValue};
+    use crate::yoctojson::TokenType::{ArrayOpen, CurlyOpen, StringValue};
 
     #[test]
     fn test_read_until() {
         let file = File::open("test_files/test.json").unwrap();
         let mut tokenizer = Tokenizer::new(file);
         let r = tokenizer.read_until("\"");
-        assert!(r == "{\"")
+        assert!(r == "{\n  \"")
     }
 
     #[test]
