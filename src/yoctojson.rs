@@ -220,9 +220,10 @@ impl Prettier {
                 print!("\n{:}{:}", "\t".repeat(self.indents), token.value);
             },
             TokenType::CurlyOpen => {
-                print!(" {:}\n", token.value);
+                print!("{:}\n", token.value);
                 self.indents += 1;
-                self.is_nl = true
+                self.is_nl = true;
+                self.is_in_arr = false
             },
             TokenType::Comma => {
                 if !self.is_in_arr {
@@ -239,6 +240,9 @@ impl Prettier {
             TokenType::ArrayClose => {
                 print!("{:}", token.value);
                 self.is_in_arr = false
+            },
+            TokenType::Colon => {
+                print!("{:} ", token.value);
             },
             _ => {
                 if self.is_nl {
